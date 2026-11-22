@@ -28,8 +28,8 @@
 * **Flexible Scheduling**:
   * Run checks at *Every startup*, *Daily*, *Weekly*, or *Monthly*.
 
-* **Background Autostart (Windows)**:
-  * Option to quietly run in the background on PC startup via Windows Task/VBS integration (with full UTF-8/BOM character encoding support).
+* **Background Autostart (Windows Registry)**:
+  * Registers cleanly under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` so it stays visible in Windows Task Manager under **Startup / Autostart** without fragile `.vbs` scripts. Runs once at login, cleans up, and exits immediately.
 
 * **Multilingual Support**:
   * Fully localized in **English** and **Deutsch** (German).
@@ -56,7 +56,7 @@ DBP Cleaner is engineered to be exceptionally lightweight and respectful of your
 
 * **Python 3.x** (if running from source) or the compiled Windows `.exe`.
 
-* **Operating System**: Primarily designed for **Windows** (uses Win32 registry, VBS scripts, and Windows Toast notifications), with basic fallback compatibility.
+* **Operating System**: Primarily designed for **Windows** (uses Win32 registry, Windows Task Manager Autostart, and Windows Toast notifications), with basic fallback compatibility.
 
 ## Usage
 
@@ -74,7 +74,7 @@ python dbp_cleaner.py
 
 * `-autostart`: Executes the background scheduled cleanup based on your configured interval and terminates right after.
 
-* `-uninstall`: Completely uninstalls the program, removing all configurations, local logs, and registry entries.
+* `-uninstall`: Completely uninstalls the program, removing all configurations, local logs, and registry entries (combine with `-quiet` for unattended removal).
 
 ## Configuration
 
@@ -92,9 +92,16 @@ You can easily adjust:
 
 * **Smart Trash**: Enable or disable intelligent detection of important files and documents.
 
+* **Recent Files Threshold**: Configure how many hours (`0`, `6`, `12`, `24`, `48`) recent downloads are automatically archived so your Downloads folder stays completely empty.
+
 * **Subfolder Cleaning**: Enable recursive scanning and empty folder cleanup.
 
 * **Interval & Max Log Size**: Tailor how often cleanups run and manage log file rotation limits.
+
+## Author & Changelog
+
+* **Author**: **2ast1**
+* See [CHANGELOG.md](CHANGELOG.md) for the complete version history.
 
 ## License
 
