@@ -4,10 +4,16 @@ __pycache__/
 *$py.class
 
 # PyInstaller
-# Following are usually created during build:
-# (Note: existing build/ and dist/ in repo are preserved unless untracked)
+build/
+dist/
 *.manifest
 *.spec.bak
+
+# Logs, Locks, Temp & Backups
+*.log
+*.lock
+*.tmp
+*.bak
 
 # Virtual environments
 venv/
