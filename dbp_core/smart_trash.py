@@ -5,28 +5,43 @@ Intelligently detects important files that should NOT be blindly trashed,
 identifies active in-progress downloads, and categorizes candidate files.
 """
 
+import math
 import os
 import re
 import time
 
 # Dateiendungen aktiver Downloads & temporärer Sperrdateien
 IN_PROGRESS_EXTENSIONS = {
-    ".crdownload",  # Chromium, Chrome, Edge, Brave, Opera
-    ".part",        # Firefox
-    ".download",    # Safari, diverse Download-Manager
+    ".crdownload",   # Chromium, Chrome, Edge, Brave, Opera
+    ".part",         # Firefox
+    ".download",     # Safari, diverse Download-Manager
     ".tmpdownload",
-    ".unconfirmed"
+    ".unconfirmed",
+    ".opdownload",   # Opera
+    ".partial",      # Edge / IE / Download-Manager
+    ".filepart",     # WinSCP / diverse Clients
+    ".aria2",        # aria2
+    ".!qb",          # qBittorrent
+    ".!ut",          # uTorrent
+    ".bc!",          # BitComet
 }
 
-# Signalwörter in Dateinamen für wichtige Dokumente (Rechnungen, Verträge, etc.)
-IMPORTANT_KEYWORDS = [
-    "rechnung", "invoice", "beleg", "kontoauszug", "steuer", "tax",
-    "vertrag", "contract", "gehalt", "salary", "ticket", "boardingpass",
-    "zertifikat", "certificate", "quittung", "receipt", "bestaetigung",
-    "confirmation", "police", "ausweis", "statement", "kuendigung",
-    "bestellung", "order", "versicherung", "meldebescheinigung",
-    "entgelt", "finanzamt", "lohn", "abrechnung"
+# Zusammengesetzte Schlüsselwörter (auch als Teil deutscher Komposita wie "Steuerbescheid")
+COMPOUND_KEYWORDS = [
+    "rechnung", "invoice", "kontoauszug", "steuer", "vertrag", "contract",
+    "gehalt", "boardingpass", "zertifikat", "certificate", "quittung",
+    "receipt", "bestätigung", "bestaetigung", "confirmation", "ausweis",
+    "kündigung", "kuendigung", "bestellung", "versicherung",
+    "meldebescheinigung", "entgelt", "finanzamt", "abrechnung",
+    "rückerstattung", "rueckerstattung", "bescheid", "zeugnis", "urkunde",
 ]
+
+# Kurze oder mehrdeutige Signalwörter: nur an Wortgrenzen matchen (kein "recorder" -> "order" oder "syntax" -> "tax")
+BOUNDARY_KEYWORDS = [
+    "beleg", "tax", "salary", "ticket", "police", "statement", "order", "lohn",
+]
+
+IMPORTANT_KEYWORDS = COMPOUND_KEYWORDS + BOUNDARY_KEYWORDS
 
 # Kategorien wichtiger Dateiendungen
 IMPORTANT_EXTENSIONS = {
@@ -44,13 +59,14 @@ IMPORTANT_EXTENSIONS = {
     ".sh", ".ps1", ".c", ".cpp", ".h", ".hpp", ".cs", ".rs", ".go", ".java",
     ".kt", ".swift", ".rb", ".php", ".xml", ".yaml", ".yml",
     # Archive & Backups
-    ".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz", ".iso", ".bak"
+    ".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz", ".iso", ".bak",
 }
 
 # Dateiendungen, die definitiv als Müll/Temp gelten
 JUNK_EXTENSIONS = {
-    ".tmp", ".temp", ".log", ".chk", ".old", ".dmp", ".crash", ".cache"
+    ".tmp", ".temp", ".log", ".chk", ".old", ".dmp", ".crash", ".cache",
 }
+
 
 def is_in_progress_download(file_path):
     """
@@ -58,7 +74,7 @@ def is_in_progress_download(file_path):
     Darf niemals verschoben oder gelöscht werden!
     """
     base_name = os.path.basename(file_path).lower()
-    
+
     # Office-Lock-Dateien (z.B. ~$Dokument.docx oder .~lock.Dokument.docx#)
     if base_name.startswith("~$") or base_name.startswith(".~lock"):
         return True
@@ -69,10 +85,12 @@ def is_in_progress_download(file_path):
 
     return False
 
+
 def is_system_metadata_file(file_path):
     """Prüft auf Windows- und macOS-Systemmetadaten."""
     base_name = os.path.basename(file_path).lower()
     return base_name in {"desktop.ini", "thumbs.db", ".ds_store"}
+
 
 def evaluate_file_importance(file_path, protect_recent_hours=24):
     """
@@ -87,7 +105,7 @@ def evaluate_file_importance(file_path, protect_recent_hours=24):
 
     filename = os.path.basename(file_path)
     name_lower = filename.lower()
-    _, ext = os.path.splitext(name_lower)
+    stem_lower, ext = os.path.splitext(name_lower)
 
     # 1. Bekannter temporärer Müll
     if ext in JUNK_EXTENSIONS:
@@ -100,23 +118,37 @@ def evaluate_file_importance(file_path, protect_recent_hours=24):
     except OSError:
         pass
 
-    # 2. Schlüsselwörter im Dateinamen prüfen (z.B. "Rechnung_2026.pdf")
-    for kw in IMPORTANT_KEYWORDS:
-        # Wortgrenzen-Suche für präzisere Treffer (z.B. "rechnung" in "Rechnung-123.pdf")
-        if re.search(r'(?i)(?:^|[\W_])' + re.escape(kw) + r'(?:$|[\W_])', name_lower) or kw in name_lower:
+    # 2. Schlüsselwörter im Dateinamen prüfen
+    for kw in COMPOUND_KEYWORDS:
+        if kw in stem_lower:
+            return True, f"Keyword '{kw}'", False
+
+    for kw in BOUNDARY_KEYWORDS:
+        if re.search(r"(?:^|[\W_])" + re.escape(kw) + r"(?:$|[\W_])", stem_lower):
             return True, f"Keyword '{kw}'", False
 
     # 3. Wichtige Dateitypen / Dokumente / Code / Medien
     if ext in IMPORTANT_EXTENSIONS:
         return True, f"Important Type ({ext})", False
 
-    # 4. Gnadenfrist für sehr neue Dateien (z.B. in den letzten 24h heruntergeladen)
-    if protect_recent_hours and protect_recent_hours > 0:
+    # 4. Gnadenfrist für sehr neue Dateien -> werden mit ins Archiv verschoben,
+    #    damit der Downloads-Ordner vollständig geleert wird.
+    hours = 0.0
+    if not isinstance(protect_recent_hours, bool) and protect_recent_hours is not None:
+        try:
+            parsed = float(protect_recent_hours)
+            if math.isfinite(parsed) and parsed > 0:
+                hours = parsed
+        except (TypeError, ValueError):
+            hours = 0.0
+
+    if hours > 0:
         try:
             mtime = os.path.getmtime(file_path)
             age_hours = (time.time() - mtime) / 3600.0
-            if 0 <= age_hours < protect_recent_hours:
-                return True, f"Recent Download (<{protect_recent_hours}h)", False
+            if age_hours < hours:
+                display_hours = int(hours) if hours.is_integer() else hours
+                return True, f"Recent Download (<{display_hours}h)", False
         except OSError:
             pass
 

@@ -21,6 +21,13 @@ AUTOSTART_VBS = os.path.join(STARTUP_DIR, "DBP_Cleaner.vbs") if STARTUP_DIR else
 STARTMENU_LNK = os.path.join(STARTMENU_DIR, "DBP Cleaner.lnk") if STARTMENU_DIR else ""
 UNINSTALL_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\DBP_Cleaner"
 
+AUTOSTART_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+AUTOSTART_APPROVED_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run"
+AUTOSTART_VALUE_NAME = "DBP Cleaner"
+
+VALID_INTERVALS = ("startup", "daily", "weekly", "monthly")
+RECENT_HOURS_OPTIONS = (0, 6, 12, 24, 48)
+
 DEFAULT_CONFIG = {
     "language": "English",
     "source_dir": "",
