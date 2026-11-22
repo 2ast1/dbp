@@ -215,7 +215,10 @@ def _run_portable_window(initial_values=None):
                 if res.get("fatal_error"):
                     messagebox.showerror(t("msg_execute_error_title"), lines[-1] if lines else "")
 
-            root.after(0, finish)
+            try:
+                root.after(0, finish)
+            except (tk.TclError, RuntimeError):
+                pass
 
         threading.Thread(target=worker, daemon=True).start()
 

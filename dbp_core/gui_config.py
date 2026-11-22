@@ -385,7 +385,10 @@ def _run_config_window(initial_values=None):
                         t("msg_execute_done_text", summary=summary),
                     )
 
-            root.after(0, finish)
+            try:
+                root.after(0, finish)
+            except (tk.TclError, RuntimeError):
+                pass
 
         threading.Thread(target=worker, daemon=True).start()
 
